@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeleGift Graph</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c27;
+    --border: #2a2a3d;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(108,99,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108,99,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.25s;
+  }
+
+  .modal-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 38px 34px 30px;
+    width: 100%; max-width: 430px;
+    box-shadow: 0 48px 96px rgba(0,0,0,0.65);
+    animation: modalIn 0.32s cubic-bezier(0.34,1.56,0.64,1);
+  }
+
+  @keyframes modalIn {
+    from { transform: scale(0.86) translateY(24px); opacity: 0; }
+    to   { transform: scale(1) translateY(0); opacity: 1; }
+  }
+
+  .modal-logo {
+    display: flex; align-items: center; gap: 11px;
+    font-weight: 800; font-size: 1.35rem;
+    letter-spacing: -0.02em; margin-bottom: 8px;
+  }
+
+  .modal-logo-icon {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px;
+  }
+
+  .modal-sub {
+    font-size: 0.8rem; color: var(--muted);
+    margin-bottom: 28px; line-height: 1.65;
+  }
+
+  .modal-label {
+    font-size: 0.63rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+    display: block;
+  }
+
+  .modal-input-wrap {
+    position: relative; display: flex; align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .modal-input-wrap input { width: 100%; padding-right: 42px; }
+
+  .toggle-vis {
+    position: absolute; right: 11px;
+    background: none; border: none;
+    cursor: pointer; color: var(--muted);
+    font-size: 0.88rem; line-height: 1; padding: 2px;
+  }
+
+  .toggle-vis:hover { color: var(--text); }
+
+  .modal-note {
+    font-size: 0.67rem; color: var(--muted);
+    margin-bottom: 24px; line-height: 1.55;
+  }
+
+  .modal-save-btn {
+    width: 100%; padding: 11px 20px;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 9px;
+    font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: 0.88rem; cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .modal-save-btn:hover { background: #7c74ff; transform: translateY(-1px); }
+  .modal-save-btn:active { transform: translateY(0); }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .modal-actions .modal-save-btn { width: auto; flex: 1; }
+  .modal-cancel-btn {
+    width: auto;
+    flex: 1;
+    padding: 11px 20px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .modal-cancel-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .export-options {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .export-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .export-opt input { accent-color: var(--accent); }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 17px 26px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.88);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 800; font-size: 1.12rem;
+    letter-spacing: -0.02em;
+  }
+
+  .logo-icon {
+    width: 29px; height: 29px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 9px; }
+
+  .balance-chip {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 4px 11px; border-radius: 20px; display: none;
+  }
+
+  .balance-chip.visible { display: block; }
+
+  .api-key-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px;
+    padding: 5px 11px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-size: 0.7rem; font-weight: 600;
+    transition: all 0.2s;
+  }
+
+  .api-key-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .breadcrumb {
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 26px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.7rem; color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    overflow-x: auto; white-space: nowrap;
+    height: 36px; min-height: 36px;
+    scrollbar-width: none;
+  }
+
+  .breadcrumb::-webkit-scrollbar { display: none; }
+
+  .breadcrumb-empty { color: var(--border); font-size: 0.68rem; }
+
+  .crumb {
+    cursor: pointer; color: var(--accent);
+    padding: 2px 7px; border-radius: 5px;
+    transition: background 0.15s; flex-shrink: 0;
+  }
+
+  .crumb:hover { background: rgba(108,99,255,0.15); }
+  .crumb.current { color: var(--text); cursor: default; font-weight: 700; }
+  .crumb.current:hover { background: transparent; }
+
+  .crumb-sep { color: var(--border); user-select: none; padding: 0 2px; }
+
+  .main {
+    display: grid;
+    grid-template-columns: 295px 1fr;
+    height: calc(100vh - 63px - 36px);
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+    overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 17px;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .section-label {
+    font-size: 0.61rem; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 7px; display: block;
+  }
+
+  input[type="text"], input[type="number"], input[type="password"] {
+    width: 100%;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 13px;
+    color: var(--text); font-family: 'Space Mono', monospace;
+    font-size: 0.78rem; outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+
+  .btn-load {
+    width: 100%; padding: 10px 18px;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 9px;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+
+  .btn-load:hover { background: #7c74ff; transform: translateY(-1px); }
+  .btn-load:active { transform: translateY(0); }
+  .btn-load:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .btn-export {
+    width: 100%;
+    margin-top: 8px;
+    padding: 9px 18px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-export:hover { border-color: var(--accent); color: var(--accent); }
+
+  .spinner {
+    width: 17px; height: 17px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite; display: none;
+  }
+
+  .spinner.visible { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .user-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; display: none;
+  }
+
+  .user-card.visible { display: block; }
+
+  .user-card-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem; flex-shrink: 0;
+  }
+
+  .user-name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; }
+  .user-id-lbl { font-family: 'Space Mono', monospace; font-size: 0.67rem; color: var(--muted); }
+
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+  .stat-item { background: var(--surface2); border-radius: 8px; padding: 9px 11px; }
+  .stat-value { font-family: 'Space Mono', monospace; font-size: 0.95rem; font-weight: 700; color: var(--accent); line-height: 1; }
+  .stat-label { font-size: 0.62rem; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .profile-fields { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .profile-field {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .profile-field-label {
+    font-size: 0.58rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+  .profile-field-row { display: flex; align-items: center; gap: 8px; }
+  .profile-field-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text);
+    word-break: break-all;
+    user-select: text;
+    flex: 1;
+  }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.62rem;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .status-msg {
+    font-family: 'Space Mono', monospace; font-size: 0.69rem;
+    padding: 8px 11px; border-radius: 6px; display: none; line-height: 1.5;
+  }
+
+  .status-msg.visible { display: block; }
+  .status-msg.error   { background: rgba(255,101,132,0.1); border: 1px solid rgba(255,101,132,0.3); color: var(--accent2); }
+  .status-msg.info    { background: rgba(108,99,255,0.1);  border: 1px solid rgba(108,99,255,0.3);  color: var(--accent); }
+  .status-msg.success { background: rgba(67,233,123,0.1);  border: 1px solid rgba(67,233,123,0.3);  color: var(--accent3); }
+
+  .divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+  .page-row { display: flex; gap: 8px; }
+  .page-row input { flex: 1; text-align: center; }
+  .page-info { font-family: 'Space Mono', monospace; font-size: 0.66rem; color: var(--muted); margin-top: 5px; }
+
+  .legend { display: flex; flex-direction: column; gap: 7px; }
+  .legend-item { display: flex; align-items: center; gap: 9px; font-size: 0.74rem; color: var(--muted); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  .graph-area {
+    position: relative; overflow: hidden; background: var(--bg);
+  }
+
+  .graph-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(108,99,255,0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108,99,255,0.12) 1px, transparent 1px),
+      radial-gradient(circle at 20% 25%, rgba(108,99,255,0.14), transparent 38%),
+      radial-gradient(circle at 80% 75%, rgba(255,101,132,0.10), transparent 42%);
+    background-size: 34px 34px, 34px 34px, 100% 100%, 100% 100%;
+    opacity: 0.9;
+  }
+
+  #graph-canvas { width: 100%; height: 100%; display: block; position: relative; z-index: 1; }
+
+  .tooltip {
+    position: absolute;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 11px; padding: 13px 15px;
+    min-width: 188px; pointer-events: none;
+    opacity: 0; transition: opacity 0.14s;
+    z-index: 200; font-size: 0.77rem;
+  }
+
+  .tooltip.visible { opacity: 1; }
+
+  .tt-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 3px; }
+  .tt-user { font-family: 'Space Mono', monospace; font-size: 0.67rem; color: var(--accent); margin-bottom: 8px; }
+
+  .tt-row {
+    display: flex; justify-content: space-between; gap: 12px;
+    color: var(--muted); font-size: 0.69rem;
+    font-family: 'Space Mono', monospace; margin-bottom: 2px;
+  }
+
+  .tt-explore {
+    margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid var(--border);
+    font-size: 0.67rem; color: var(--accent);
+    text-align: center; font-family: 'Space Mono', monospace;
+    opacity: 0.8;
+  }
+
+  .empty-state {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; text-align: center;
+  }
+
+  .empty-icon { font-size: 2.8rem; opacity: 0.2; }
+  .empty-title { font-weight: 700; font-size: 1rem; color: var(--text); opacity: 0.4; }
+  .empty-sub { font-size: 0.74rem; color: var(--muted); opacity: 0.55; max-width: 210px; line-height: 1.55; }
+
+  .graph-info {
+    position: absolute; top: 13px; right: 13px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 13px;
+    font-family: 'Space Mono', monospace; font-size: 0.67rem;
+    color: var(--muted); display: none;
+  }
+
+  .graph-info.visible { display: block; }
+
+  .graph-controls {
+    position: absolute; bottom: 17px; right: 17px;
+    display: flex; flex-direction: column; gap: 5px; z-index: 50;
+  }
+
+  .ctrl-btn {
+    width: 32px; height: 32px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; color: var(--muted);
+    font-size: 1rem; display: flex; align-items: center;
+    justify-content: center; transition: all 0.2s;
+  }
+
+  .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .graph-area { height: 65vh; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-logo">
+        TeleGift Graph
+      </div>
+      <p class="modal-sub">Visualize Telegram gift relationships powered by telelog.org. Enter your API key once to get started.</p>
+
+      <label class="modal-label" for="modal-api-key">API Key</label>
+      <div class="modal-input-wrap">
+        <input type="password" id="modal-api-key" placeholder="Paste your Bearer token…" autocomplete="off">
+        <button class="toggle-vis" onclick="toggleModalVis()" title="Show/hide">👁</button>
+      </div>
+      <button class="modal-save-btn" onclick="saveApiKey()">Save & Continue →</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="export-modal-overlay">
+    <div class="modal">
+      <div class="modal-logo">
+        <div class="modal-logo-icon">⬇</div>
+        Export Graph Data
+      </div>
+      <p class="modal-sub">Choose an export format for the currently loaded graph.</p>
+
+      <span class="modal-label">Format</span>
+      <div class="export-options">
+        <label class="export-opt">
+          <input type="radio" name="export-format" value="json" checked>
+          JSON (structured data)
+        </label>
+        <label class="export-opt">
+          <input type="radio" name="export-format" value="txt">
+          TXT (human-readable report)
+        </label>
+        <label class="export-opt">
+          <input type="radio" name="export-format" value="css">
+          CSS (custom properties snapshot)
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-cancel-btn" onclick="closeExportModal()">Cancel</button>
+        <button class="modal-save-btn" onclick="exportData()">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <header>
+    <div class="logo">
+      TeleGift Graph
+    </div>
+    <div class="header-right">
+      <span class="balance-chip" id="balance-chip">balance: <span id="balance-val">—</span></span>
+      <button class="api-key-btn" onclick="openModal()">🔑 API Key</button>
+    </div>
+  </header>
+
+  <div class="breadcrumb" id="breadcrumb">
+    <span class="breadcrumb-empty">No history yet</span>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar">
+
+      <div>
+        <span class="section-label">User ID</span>
+        <input type="number" id="user-id" placeholder="123456789" min="1">
+      </div>
+
+      <div>
+        <span class="section-label">Pagination</span>
+        <div class="page-row">
+          <input type="number" id="page-num" value="1" min="1" placeholder="Page">
+          <input type="number" id="page-size" value="20" min="1" max="100" placeholder="Size">
+        </div>
+        <div class="page-info" id="page-info"></div>
+      </div>
+
+      <button class="btn-load" id="load-btn" onclick="loadData()">
+        <span class="spinner" id="spinner"></span>
+        <span id="btn-label">Load Graph</span>
+      </button>
+      <button class="btn-export" type="button" onclick="openExportModal()">Export data</button>
+
+      <div class="status-msg" id="status-msg"></div>
+
+      <div class="divider"></div>
+
+      <div class="user-card" id="user-card">
+        <div class="user-card-header">
+          <div class="avatar" id="user-avatar">?</div>
+          <div>
+            <div class="user-name" id="user-fullname">—</div>
+            <div class="user-id-lbl" id="user-idlabel">ID: —</div>
+          </div>
+        </div>
+        <div class="stats-grid" id="stats-grid"></div>
+        <div class="profile-fields" id="profile-fields"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <span class="section-label">Legend</span>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#43e97b"></div>Queried user</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#6c63ff"></div>Gift sender</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ff6584"></div>Gift receiver</div>
+        </div>
+        <div style="margin-top:10px; font-size:0.7rem; color:var(--muted); line-height:1.6;">
+          <span style="color:var(--accent); font-weight:600;">Double-click</span> any node to explore their gift network.
+        </div>
+      </div>
+
+      <div style="margin-top:auto">
+        <span class="section-label">Controls</span>
+        <div style="font-size:0.69rem; color:var(--muted); line-height:1.7;">
+          Hover to inspect · Scroll to zoom<br>Drag canvas to pan · Drag nodes to move
+        </div>
+      </div>
+
+    </aside>
+
+    <div class="graph-area" id="graph-area">
+      <canvas id="graph-canvas"></canvas>
+
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🕸</div>
+        <div class="empty-title">No graph loaded</div>
+        <div class="empty-sub">Enter a Telegram user ID and click Load Graph to start exploring.</div>
+      </div>
+
+      <div class="tooltip" id="tooltip">
+        <div class="tt-name" id="tt-name"></div>
+        <div class="tt-user" id="tt-user"></div>
+        <div class="tt-row"><span>ID</span><span id="tt-id"></span></div>
+        <div class="tt-row"><span>Status</span><span id="tt-status"></span></div>
+        <div class="tt-row"><span>Gifts sent</span><span id="tt-sent"></span></div>
+        <div class="tt-row"><span>Gifts recv</span><span id="tt-recv"></span></div>
+        <div class="tt-row" id="tt-date-row"><span>Last gift</span><span id="tt-date"></span></div>
+        <div class="tt-explore">double-click to explore →</div>
+      </div>
+
+      <div class="graph-info" id="graph-info"></div>
+
+      <div class="graph-controls">
+        <button class="ctrl-btn" onclick="zoomIn()"    title="Zoom in">+</button>
+        <button class="ctrl-btn" onclick="zoomOut()"   title="Zoom out">−</button>
+        <button class="ctrl-btn" onclick="resetView()" title="Reset view">⊙</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'telegift_api_key';
+
+const getApiKey  = () => localStorage.getItem(STORAGE_KEY) || '';
+const storeApiKey = k => localStorage.setItem(STORAGE_KEY, k);
+
+function openModal() {
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  const inp = document.getElementById('modal-api-key');
+  inp.value = getApiKey();
+  inp.style.borderColor = '';
+  setTimeout(() => inp.focus(), 80);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function toggleModalVis() {
+  const inp = document.getElementById('modal-api-key');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function saveApiKey() {
+  const val = document.getElementById('modal-api-key').value.trim();
+  if (!val) {
+    document.getElementById('modal-api-key').style.borderColor = 'var(--accent2)';
+    return;
+  }
+  storeApiKey(val);
+  closeModal();
+}
+
+function openExportModal() {
+  if (!lastLoaded) {
+    setStatus('Load graph data first, then export.', 'error');
+    return;
+  }
+  document.getElementById('export-modal-overlay').classList.remove('hidden');
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal-overlay').classList.add('hidden');
+}
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay') && getApiKey()) closeModal();
+});
+
+document.getElementById('modal-api-key').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveApiKey();
+});
+
+document.getElementById('export-modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('export-modal-overlay')) closeExportModal();
+});
+
+let navHistory = [];
+
+function pushHistory(id, label) {
+  navHistory = navHistory.filter(h => h.id !== id);
+  navHistory.push({ id, label });
+  renderBreadcrumb();
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  if (!navHistory.length) {
+    bc.innerHTML = '<span class="breadcrumb-empty">No history yet</span>';
+    return;
+  }
+  bc.innerHTML = navHistory.map((h, i) => {
+    const isCurrent = i === navHistory.length - 1;
+    const sep = i > 0 ? '<span class="crumb-sep">›</span>' : '';
+    const onclick = isCurrent ? '' : `onclick="jumpHistory(${i})"`;
+    return `${sep}<span class="crumb ${isCurrent ? 'current' : ''}" ${onclick} title="ID: ${h.id}">${h.label}</span>`;
+  }).join('');
+  bc.scrollLeft = bc.scrollWidth;
+}
+
+function jumpHistory(idx) {
+  const item = navHistory[idx];
+  navHistory = navHistory.slice(0, idx + 1);
+  renderBreadcrumb();
+  document.getElementById('user-id').value = item.id;
+  document.getElementById('page-num').value = 1;
+  loadDataForId(item.id);
+}
+
+let nodes = [], edges = [];
+let canvas, ctx;
+let transform = { x: 0, y: 0, scale: 1 };
+let dragging = null, dragOffset = { x:0, y:0 };
+let panning = false, panStart = { x:0, y:0 }, panOrigin = { x:0, y:0 };
+let hoveredNode = null, animFrame = null;
+let simRunning = false, simTick = 0;
+let selectedNode = null;
+let downNode = null;
+let downPos = null;
+let dragMoved = false;
+let currentCenterStats = null;
+let lastLoaded = null;
+
+window.addEventListener('load', () => {
+  if (!getApiKey()) openModal(); else closeModal();
+
+  canvas = document.getElementById('graph-canvas');
+  ctx    = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  setupCanvasEvents();
+});
+
+function resizeCanvas() {
+  const area = document.getElementById('graph-area');
+  canvas.width  = area.clientWidth;
+  canvas.height = area.clientHeight;
+  if (nodes.length) drawGraph();
+}
+
+function setStatus(msg, type = 'info') {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.className = `status-msg visible ${type}`;
+}
+
+function clearStatus() {
+  document.getElementById('status-msg').className = 'status-msg';
+}
+
+function setLoading(on) {
+  document.getElementById('load-btn').disabled = on;
+  document.getElementById('spinner').className = on ? 'spinner visible' : 'spinner';
+  document.getElementById('btn-label').textContent = on ? 'Loading…' : 'Load Graph';
+}
+
+function loadData() {
+  const uid = document.getElementById('user-id').value.trim();
+  if (!uid) { setStatus('Enter a User ID first.', 'error'); return; }
+  loadDataForId(parseInt(uid));
+}
+
+async function loadDataForId(userId) {
+  const apiKey = getApiKey();
+  if (!apiKey) { openModal(); return; }
+
+  const pageSize = parseInt(document.getElementById('page-size').value) || 20;
+  const pageNum  = parseInt(document.getElementById('page-num').value)  || 1;
+
+  setLoading(true);
+  clearStatus();
+
+  try {
+    const headers = { 'Authorization': `Bearer ${apiKey}`, 'accept': 'application/json' };
+
+    const [statsRes, giftsRes] = await Promise.all([
+      fetch(`https://telelog.org/api/v1/users/${userId}/stats_min`, { headers }),
+      fetch(`https://telelog.org/api/v1/users/${userId}/gifts_relation?page=${pageNum}&pageSize=${pageSize}`, { headers })
+    ]);
+
+    if (statsRes.status === 401 || giftsRes.status === 401) {
+      setStatus('Invalid API key — click "🔑 API Key" to update.', 'error');
+      return;
+    }
+
+    if (!statsRes.ok) throw new Error(`Stats ${statsRes.status}: ${statsRes.statusText}`);
+    if (!giftsRes.ok) throw new Error(`Gifts ${giftsRes.status}: ${giftsRes.statusText}`);
+
+    const statsData = await statsRes.json();
+    const giftsData = await giftsRes.json();
+
+    if (!giftsData.success) throw new Error('Gifts API returned success:false');
+
+    const bal = giftsData.tech?.current_ballance ?? giftsData.tech?.current_balance;
+    if (bal !== undefined) {
+      document.getElementById('balance-val').textContent = bal;
+      document.getElementById('balance-chip').classList.add('visible');
+    }
+
+    currentCenterStats = statsData;
+    buildGraph(parseInt(userId), statsData, giftsData.data || []);
+    lastLoaded = {
+      userId: parseInt(userId),
+      loadedAt: new Date().toISOString(),
+      pageNum,
+      pageSize,
+      stats: statsData,
+      relations: giftsData.data || []
+    };
+    const centerNode = nodes.find(n => n.id === parseInt(userId));
+    renderUserCard(centerNode, statsData);
+
+    const count = giftsData.data?.length || 0;
+    document.getElementById('page-info').textContent = `${count} relationships · page ${pageNum}`;
+
+    const label = [statsData.first_name, statsData.last_name].filter(Boolean).join(' ') || `#${userId}`;
+    pushHistory(userId, label);
+
+    setStatus(`${nodes.length} users · ${edges.length} connections loaded.`, 'success');
+  } catch (err) {
+    setStatus(err.message, 'error');
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderUserCard(node, centerStats = null) {
+  const fullname = node?.label || [centerStats?.first_name, centerStats?.last_name].filter(Boolean).join(' ') || 'Unknown';
+  const rawId = node?.id ?? centerStats?.id ?? '—';
+  const username = node?.username || centerStats?.mainUsername || '';
+  document.getElementById('user-avatar').textContent  = (fullname || '?')[0].toUpperCase();
+  document.getElementById('user-fullname').textContent = fullname;
+  document.getElementById('user-idlabel').textContent  = `ID: ${rawId}`;
+
+  const stats = centerStats && node?.type === 'center'
+    ? [
+        { label: 'Messages',  value: fmtNum(centerStats.total_msg_count) },
+        { label: 'Groups',    value: fmtNum(centerStats.total_groups) },
+        { label: 'Usernames', value: centerStats.usernames_count ?? '—' },
+        { label: 'Admin in',  value: centerStats.adm_in_groups   ?? '—' },
+      ]
+    : [
+        { label: 'Gifts sent', value: fmtNum(node?.giftsSent ?? 0) },
+        { label: 'Gifts recv', value: fmtNum(node?.giftsRecv ?? 0) },
+        { label: 'Type',       value: node?.type || '—' },
+        { label: 'Status',     value: node?.active === false ? 'inactive' : 'active' },
+      ];
+
+  document.getElementById('stats-grid').innerHTML = stats.map(s => `
+    <div class="stat-item">
+      <div class="stat-value">${s.value}</div>
+      <div class="stat-label">${s.label}</div>
+    </div>
+  `).join('');
+
+  const fieldRows = [
+    { label: 'Username', value: username ? `@${username}` : '—', raw: username ? `@${username}` : '' },
+    { label: 'Name', value: fullname, raw: fullname },
+    { label: 'ID', value: String(rawId), raw: String(rawId) }
+  ];
+
+  document.getElementById('profile-fields').innerHTML = fieldRows.map((f, idx) => `
+    <div class="profile-field">
+      <div class="profile-field-label">${f.label}</div>
+      <div class="profile-field-row">
+        <div class="profile-field-value">${f.value}</div>
+        <button class="copy-btn" type="button" onclick="copyProfileField(${idx})" ${f.raw ? '' : 'disabled'}>copy</button>
+      </div>
+    </div>
+  `).join('');
+
+  window.__profileCopyValues = fieldRows.map(f => f.raw);
+
+  document.getElementById('user-card').classList.add('visible');
+}
+
+async function copyProfileField(idx) {
+  const values = window.__profileCopyValues || [];
+  const value = values[idx];
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus('Copied to clipboard.', 'success');
+  } catch {
+    setStatus('Clipboard blocked by browser permissions.', 'error');
+  }
+}
+
+function fmtNum(n) {
+  if (!n && n !== 0) return '—';
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toString();
+}
+
+function exportData() {
+  if (!lastLoaded) {
+    setStatus('No data to export yet.', 'error');
+    closeExportModal();
+    return;
+  }
+
+  const selected = document.querySelector('input[name="export-format"]:checked');
+  const format = selected ? selected.value : 'json';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  let content = '';
+  let mime = 'text/plain;charset=utf-8';
+  let ext = format;
+
+  if (format === 'json') {
+    content = JSON.stringify({
+      ...lastLoaded,
+      graph: {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        nodes: nodes.map(n => ({
+          id: n.id,
+          label: n.label,
+          username: n.username,
+          type: n.type,
+          active: n.active,
+          giftsSent: n.giftsSent,
+          giftsRecv: n.giftsRecv
+        })),
+        edges: edges.map(e => ({
+          from: e.from,
+          to: e.to,
+          date: e.date ? e.date.toISOString() : null
+        }))
+      }
+    }, null, 2);
+    mime = 'application/json;charset=utf-8';
+  } else if (format === 'txt') {
+    const lines = [
+      'TeleGift Graph Export',
+      `Exported: ${new Date().toISOString()}`,
+      `Center user ID: ${lastLoaded.userId}`,
+      `Page: ${lastLoaded.pageNum} | Page size: ${lastLoaded.pageSize}`,
+      `Nodes: ${nodes.length} | Edges: ${edges.length}`,
+      '',
+      'Nodes:',
+      ...nodes.map(n => `- ${n.id} | ${n.label} | ${n.username ? '@'+n.username : 'no_username'} | ${n.type} | sent:${n.giftsSent} recv:${n.giftsRecv}`)
+    ];
+    content = lines.join('\n');
+    ext = 'txt';
+  } else {
+    const cssVars = [
+      ':root {',
+      `  --telegift-center-id: "${lastLoaded.userId}";`,
+      `  --telegift-node-count: ${nodes.length};`,
+      `  --telegift-edge-count: ${edges.length};`,
+      `  --telegift-page-num: ${lastLoaded.pageNum};`,
+      `  --telegift-page-size: ${lastLoaded.pageSize};`,
+      '}',
+      '',
+      `/* user labels (${nodes.length}) */`,
+      ...nodes.map((n, i) => `.telegift-node-${i + 1} { --id: "${n.id}"; --name: "${String(n.label).replace(/"/g, '\\"')}"; --username: "${n.username ? '@'+n.username : ''}"; }`)
+    ];
+    content = cssVars.join('\n');
+    mime = 'text/css;charset=utf-8';
+    ext = 'css';
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `telegift-export-${stamp}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  closeExportModal();
+  setStatus(`Exported as ${format.toUpperCase()}.`, 'success');
+}
+
+function buildGraph(centerId, centerStats, relations) {
+  const nodeMap = new Map();
+
+  const centerLabel = [centerStats.first_name, centerStats.last_name].filter(Boolean).join(' ') || `User ${centerId}`;
+  nodeMap.set(centerId, {
+    id: centerId, label: centerLabel,
+    username: centerStats.mainUsername || '',
+    type: 'center', active: centerStats.is_active,
+    giftsSent: 0, giftsRecv: 0, lastDate: null,
+    x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0
+  });
+
+  relations.forEach(r => {
+    const addNode = (id, firstName, lastName, username, isActive) => {
+      if (!nodeMap.has(id)) {
+        nodeMap.set(id, {
+          id, label: [firstName, lastName].filter(Boolean).join(' ') || `User ${id}`,
+          username: username || '',
+          type: id === centerId ? 'center' : (r.from_user_id === id ? 'from' : 'to'),
+          active: isActive,
+          giftsSent: 0, giftsRecv: 0, lastDate: null,
+          x: 0, y: 0, vx: 0, vy: 0
+        });
+      }
+    };
+    addNode(r.from_user_id, r.from_first_name, r.from_last_name, r.from_mainUsername, r.from_is_active);
+    addNode(r.to_user_id,   r.to_first_name,   r.to_last_name,   r.to_mainUsername,   r.to_is_active);
+  });
+
+  const allNodes = [...nodeMap.values()];
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const radius = Math.min(cx, cy) * 0.6;
+  const periph = allNodes.filter(n => n.type !== 'center');
+  periph.forEach((n, i) => {
+    const angle = (i / Math.max(periph.length, 1)) * 2 * Math.PI;
+    n.x = cx + radius * Math.cos(angle) + (Math.random() - 0.5) * 55;
+    n.y = cy + radius * Math.sin(angle) + (Math.random() - 0.5) * 55;
+  });
+
+  const edgeList = relations.map(r => {
+    const fn = nodeMap.get(r.from_user_id);
+    const tn = nodeMap.get(r.to_user_id);
+    if (fn) fn.giftsSent++;
+    if (tn) tn.giftsRecv++;
+    const date = r.last_gift_date ? new Date(r.last_gift_date) : null;
+    if (fn && date && (!fn.lastDate || date > fn.lastDate)) fn.lastDate = date;
+    if (tn && date && (!tn.lastDate || date > tn.lastDate)) tn.lastDate = date;
+    return { from: r.from_user_id, to: r.to_user_id, date };
+  });
+
+  nodes = allNodes;
+  edges = edgeList;
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('graph-info').textContent = `${nodes.length} users · ${edges.length} gifts`;
+  document.getElementById('graph-info').classList.add('visible');
+
+  resetView();
+  runSimulation();
+}
+
+function runSimulation() {
+  simRunning = true; simTick = 0;
+  if (animFrame) cancelAnimationFrame(animFrame);
+  tick();
+}
+
+function tick() {
+  simTick++;
+  applyForces();
+  drawGraph();
+  if (simRunning && simTick < 480) {
+    animFrame = requestAnimationFrame(tick);
+  } else {
+    simRunning = false;
+    animFrame = requestAnimationFrame(drawGraph);
+  }
+}
+
+function applyForces() {
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const alpha = Math.max(0.01, 1 - simTick / 340);
+
+  nodes.forEach(n => { n.fx = 0; n.fy = 0; });
+
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const f = 4600 / (d * d);
+      a.fx -= (dx/d)*f; a.fy -= (dy/d)*f;
+      b.fx += (dx/d)*f; b.fy += (dy/d)*f;
+    }
+  }
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  edges.forEach(e => {
+    const a = byId.get(e.from), b = byId.get(e.to);
+    if (!a || !b) return;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.sqrt(dx*dx + dy*dy) || 1;
+    const f = (d - 155) * 0.042;
+    a.fx += (dx/d)*f; a.fy += (dy/d)*f;
+    b.fx -= (dx/d)*f; b.fy -= (dy/d)*f;
+  });
+
+  nodes.forEach(n => {
+    if (n === dragging) return;
+    n.fx += (cx - n.x) * 0.013;
+    n.fy += (cy - n.y) * 0.013;
+    n.vx = (n.vx + n.fx * alpha) * 0.84;
+    n.vy = (n.vy + n.fy * alpha) * 0.84;
+    n.x += n.vx; n.y += n.vy;
+  });
+}
+
+function drawGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(transform.x, transform.y);
+  ctx.scale(transform.scale, transform.scale);
+
+  const byId = new Map(nodes.map(n => [n.id, n]));
+
+  edges.forEach(e => {
+    const a = byId.get(e.from), b = byId.get(e.to);
+    if (!a || !b) return;
+
+    const mx = (a.x+b.x)/2 + (b.y-a.y)*0.15;
+    const my = (a.y+b.y)/2 - (b.x-a.x)*0.15;
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(mx, my, b.x, b.y);
+    ctx.strokeStyle = 'rgba(108,99,255,0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const angle = Math.atan2(b.y - my, b.x - mx);
+    const ar = nodeR(b) + 3;
+    const ax = b.x - ar*Math.cos(angle);
+    const ay = b.y - ar*Math.sin(angle);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - 7*Math.cos(angle-0.38), ay - 7*Math.sin(angle-0.38));
+    ctx.lineTo(ax - 7*Math.cos(angle+0.38), ay - 7*Math.sin(angle+0.38));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(108,99,255,0.38)';
+    ctx.fill();
+  });
+
+  nodes.forEach(n => {
+    const r = nodeR(n);
+    const hovered = hoveredNode === n;
+    const col = nodeCol(n);
+
+    if (hovered) {
+      const g = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, r*2.6);
+      g.addColorStop(0, col+'44'); g.addColorStop(1, 'transparent');
+      ctx.beginPath(); ctx.arc(n.x, n.y, r*2.6, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+    ctx.fillStyle = col + (n.active === false ? '77' : 'bb');
+    ctx.fill();
+    ctx.strokeStyle = hovered ? '#fff' : col;
+    ctx.lineWidth = hovered ? 2.5 : 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${Math.max(9, r*0.62)}px Syne, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText((n.label||'?')[0].toUpperCase(), n.x, n.y);
+
+    const ls = Math.min(1, 1.15/transform.scale);
+    ctx.save();
+    ctx.translate(n.x, n.y+r+4);
+    ctx.scale(ls, ls);
+    ctx.fillStyle = hovered ? '#e8e8f0' : 'rgba(232,232,240,0.52)';
+    ctx.font = `${hovered?'600':'400'} 11px Syne, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const lbl = n.label.length > 13 ? n.label.slice(0,12)+'…' : n.label;
+    ctx.fillText(lbl, 0, 0);
+    ctx.restore();
+  });
+
+  ctx.restore();
+}
+
+function nodeR(n) {
+  if (n.type === 'center') return 22;
+  return 13 + Math.min(9, (n.giftsSent + n.giftsRecv) * 1.4);
+}
+
+function nodeCol(n) {
+  if (n.type === 'center') return '#43e97b';
+  if (n.type === 'from')   return '#6c63ff';
+  return '#ff6584';
+}
+
+function showTooltip(node, clientX, clientY) {
+  document.getElementById('tt-name').textContent   = node.label || 'Unknown';
+  document.getElementById('tt-user').textContent   = node.username ? '@'+node.username : 'no username';
+  document.getElementById('tt-id').textContent     = node.id;
+  document.getElementById('tt-status').textContent = node.active === false ? '🔴 inactive' : '🟢 active';
+  document.getElementById('tt-sent').textContent   = node.giftsSent;
+  document.getElementById('tt-recv').textContent   = node.giftsRecv;
+  if (node.lastDate) {
+    document.getElementById('tt-date').textContent = node.lastDate.toLocaleDateString();
+    document.getElementById('tt-date-row').style.display = 'flex';
+  } else {
+    document.getElementById('tt-date-row').style.display = 'none';
+  }
+
+  const area = document.getElementById('graph-area').getBoundingClientRect();
+  let left = clientX - area.left + 14;
+  let top  = clientY - area.top  + 14;
+  if (left + 210 > area.width)  left = clientX - area.left - 224;
+  if (top  + 200 > area.height) top  = clientY - area.top  - 210;
+
+  const tt = document.getElementById('tooltip');
+  tt.style.left = left+'px';
+  tt.style.top  = top+'px';
+  tt.classList.add('visible');
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('visible');
+}
+
+function setupCanvasEvents() {
+  canvas.addEventListener('mousedown',  onMouseDown);
+  canvas.addEventListener('mousemove',  onMouseMove);
+  canvas.addEventListener('mouseup',    onMouseUp);
+  window.addEventListener('mouseup',    onMouseUp);
+  canvas.addEventListener('dblclick',   onDblClick);
+  canvas.addEventListener('mouseleave', () => { panning=false; dragging=null; hideTooltip(); hoveredNode=null; });
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchmove',  onTouchMove,  { passive: false });
+  canvas.addEventListener('touchend',   onTouchEnd);
+}
+
+function worldPos(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - r.left - transform.x) / transform.scale,
+    y: (clientY - r.top  - transform.y) / transform.scale
+  };
+}
+
+function hitNode(wx, wy) {
+  for (let i = nodes.length-1; i >= 0; i--) {
+    const n = nodes[i], r = nodeR(n);
+    if ((wx-n.x)**2 + (wy-n.y)**2 <= r*r) return n;
+  }
+  return null;
+}
+
+function onMouseDown(e) {
+  e.preventDefault();
+  const w = worldPos(e.clientX, e.clientY);
+  const n = hitNode(w.x, w.y);
+  downNode = n;
+  downPos = { x: e.clientX, y: e.clientY };
+  dragMoved = false;
+  if (n) {
+    dragging = n;
+    dragOffset = { x: w.x-n.x, y: w.y-n.y };
+    if (!simRunning) { simRunning=true; tick(); }
+  } else {
+    panning = true;
+    const r = canvas.getBoundingClientRect();
+    panStart  = { x: e.clientX-r.left, y: e.clientY-r.top };
+    panOrigin = { x: transform.x, y: transform.y };
+  }
+}
+
+function onMouseMove(e) {
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX-r.left, my = e.clientY-r.top;
+  const w = worldPos(e.clientX, e.clientY);
+
+  if (dragging) {
+    if (!dragMoved && downPos) {
+      const dx = e.clientX - downPos.x;
+      const dy = e.clientY - downPos.y;
+      dragMoved = (dx*dx + dy*dy) > 16;
+    }
+    dragging.x = w.x - dragOffset.x;
+    dragging.y = w.y - dragOffset.y;
+    dragging.vx = 0; dragging.vy = 0;
+    drawGraph();
+    return;
+  }
+  if (panning) {
+    transform.x = panOrigin.x + (mx - panStart.x);
+    transform.y = panOrigin.y + (my - panStart.y);
+    drawGraph(); return;
+  }
+
+  const n = hitNode(w.x, w.y);
+  hoveredNode = n;
+  canvas.style.cursor = n ? 'pointer' : 'default';
+  if (n) showTooltip(n, e.clientX, e.clientY); else hideTooltip();
+  drawGraph();
+}
+
+function onMouseUp() {
+  if (downNode && !dragMoved) {
+    selectedNode = downNode;
+    renderUserCard(selectedNode, currentCenterStats);
+  }
+  dragging = null;
+  panning = false;
+  downNode = null;
+  downPos = null;
+  dragMoved = false;
+}
+
+function onDblClick(e) {
+  const w = worldPos(e.clientX, e.clientY);
+  const n = hitNode(w.x, w.y);
+  if (!n) return;
+  hideTooltip();
+  document.getElementById('user-id').value  = n.id;
+  document.getElementById('page-num').value = 1;
+  loadDataForId(n.id);
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX-r.left, my = e.clientY-r.top;
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  const ns = Math.max(0.15, Math.min(6, transform.scale*factor));
+  transform.x = mx - (mx-transform.x)*(ns/transform.scale);
+  transform.y = my - (my-transform.y)*(ns/transform.scale);
+  transform.scale = ns;
+  drawGraph();
+}
+
+let lastPinchDist = 0;
+function onTouchStart(e) {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const w = worldPos(t.clientX, t.clientY);
+    const n = hitNode(w.x, w.y);
+    if (n) { dragging=n; dragOffset={x:w.x-n.x, y:w.y-n.y}; }
+    else {
+      panning=true;
+      const r=canvas.getBoundingClientRect();
+      panStart={x:t.clientX-r.left, y:t.clientY-r.top};
+      panOrigin={x:transform.x, y:transform.y};
+    }
+  } else if (e.touches.length===2) {
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    lastPinchDist=Math.sqrt(dx*dx+dy*dy);
+  }
+}
+
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length===1) {
+    const t=e.touches[0], r=canvas.getBoundingClientRect();
+    const mx=t.clientX-r.left, my=t.clientY-r.top;
+    const w=worldPos(t.clientX,t.clientY);
+    if (dragging) { dragging.x=w.x-dragOffset.x; dragging.y=w.y-dragOffset.y; }
+    else if (panning) { transform.x=panOrigin.x+(mx-panStart.x); transform.y=panOrigin.y+(my-panStart.y); drawGraph(); }
+  } else if (e.touches.length===2) {
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    transform.scale=Math.max(0.15,Math.min(6,transform.scale*(d/lastPinchDist)));
+    lastPinchDist=d; drawGraph();
+  }
+}
+
+function onTouchEnd() { dragging=null; panning=false; }
+
+function zoomIn()    { transform.scale=Math.min(6,transform.scale*1.2); drawGraph(); }
+function zoomOut()   { transform.scale=Math.max(0.15,transform.scale/1.2); drawGraph(); }
+function resetView() { transform={x:0,y:0,scale:1}; drawGraph(); }
+
+document.addEventListener('keydown', e => {
+  const modalHidden = document.getElementById('modal-overlay').classList.contains('hidden');
+  const exportModalHidden = document.getElementById('export-modal-overlay').classList.contains('hidden');
+  if (e.key==='Enter' && modalHidden && !document.getElementById('load-btn').disabled) loadData();
+  if (e.key==='Escape' && !modalHidden && getApiKey()) closeModal();
+  if (e.key==='Escape' && !exportModalHidden) closeExportModal();
+});
+</script>
+</body>
+</html>
