@@ -323,7 +323,18 @@
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 1rem; flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
   }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+  .avatar.has-photo img { display: block; }
+  .avatar-text { position: relative; z-index: 1; }
+  .avatar.has-photo .avatar-text { display: none; }
 
   .user-name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; }
   .user-id-lbl { font-family: 'Space Mono', monospace; font-size: 0.67rem; color: var(--muted); }
@@ -608,7 +619,10 @@
 
       <div class="user-card" id="user-card">
         <div class="user-card-header">
-          <div class="avatar" id="user-avatar">?</div>
+          <div class="avatar" id="user-avatar">
+            <img id="user-avatar-img" alt="Profile photo">
+            <span class="avatar-text" id="user-avatar-text">?</span>
+          </div>
           <div>
             <div class="user-name" id="user-fullname">—</div>
             <div class="user-id-lbl" id="user-idlabel">ID: —</div>
@@ -780,8 +794,12 @@ let dragMoved = false;
 let currentCenterStats = null;
 let lastLoaded = null;
 let selectedProfileId = null;
+let selectedProfileUsername = '';
 const reputationCache = new Map();
 const profileHistoryCache = new Map();
+const profileImageUrlCache = new Map();
+const profileImageElementCache = new Map();
+const profileImageLoading = new Set();
 
 window.addEventListener('load', () => {
   if (!getApiKey()) openModal(); else closeModal();
@@ -931,7 +949,7 @@ function renderUserCard(node, centerStats = null) {
   const fullname = node?.label || [centerStats?.first_name, centerStats?.last_name].filter(Boolean).join(' ') || 'Unknown';
   const rawId = node?.id ?? centerStats?.id ?? '—';
   const username = node?.username || centerStats?.mainUsername || '';
-  document.getElementById('user-avatar').textContent  = (fullname || '?')[0].toUpperCase();
+  renderSidebarAvatar(fullname, username);
   document.getElementById('user-fullname').textContent = fullname;
   document.getElementById('user-idlabel').textContent  = `ID: ${rawId}`;
 
@@ -974,11 +992,39 @@ function renderUserCard(node, centerStats = null) {
 
   window.__profileCopyValues = fieldRows.map(f => f.raw);
   selectedProfileId = typeof rawId === 'number' ? rawId : parseInt(rawId, 10);
+  selectedProfileUsername = (username || '').trim().replace(/^@/, '');
   renderReputation('—');
   renderHistoryPlaceholder();
   if (selectedProfileId) loadReputation(selectedProfileId);
 
   document.getElementById('user-card').classList.add('visible');
+}
+
+function renderSidebarAvatar(fullname, username) {
+  const avatar = document.getElementById('user-avatar');
+  const avatarText = document.getElementById('user-avatar-text');
+  const avatarImg = document.getElementById('user-avatar-img');
+  avatarText.textContent = (fullname || '?')[0].toUpperCase();
+  avatar.classList.remove('has-photo');
+  avatarImg.removeAttribute('src');
+
+  const uname = (username || '').trim().replace(/^@/, '');
+  if (!uname) return;
+  if (profileImageUrlCache.has(uname)) {
+    avatarImg.src = profileImageUrlCache.get(uname);
+    avatar.classList.add('has-photo');
+    return;
+  }
+  fetchProfileImageForUsername(uname)
+    .then(imageUrl => {
+      if (!imageUrl) return;
+      profileImageUrlCache.set(uname, imageUrl);
+      if (!selectedProfileUsername || selectedProfileUsername === uname) {
+        avatarImg.src = imageUrl;
+        avatar.classList.add('has-photo');
+      }
+    })
+    .catch(err => console.error(err));
 }
 
 function renderReputation(text) {
@@ -1274,7 +1320,90 @@ function buildGraph(centerId, centerStats, relations) {
   document.getElementById('graph-info').classList.add('visible');
 
   resetView();
+  prefetchProfileImages();
   runSimulation();
+}
+
+function prefetchProfileImages() {
+  const candidates = nodes
+    .filter(n => !!n.username)
+    .sort((a, b) => (b.giftsSent + b.giftsRecv) - (a.giftsSent + a.giftsRecv))
+    .slice(0, 24);
+  candidates.forEach(n => ensureNodeProfileImage(n));
+}
+
+function ensureNodeProfileImage(node) {
+  if (!node || !node.username) return;
+  const uname = node.username.trim().replace(/^@/, '');
+  if (!uname) return;
+
+  if (profileImageElementCache.has(uname)) {
+    node.profileImg = profileImageElementCache.get(uname);
+    return;
+  }
+  if (profileImageLoading.has(uname)) return;
+  profileImageLoading.add(uname);
+
+  fetchProfileImageForUsername(uname)
+    .then(async imageUrl => {
+      if (!imageUrl) return;
+      profileImageUrlCache.set(uname, imageUrl);
+      const img = await loadProfileImage(imageUrl);
+      if (!img) return;
+      profileImageElementCache.set(uname, img);
+      nodes.forEach(n => {
+        if ((n.username || '').replace(/^@/, '') === uname) n.profileImg = img;
+      });
+      if ((selectedNode?.username || '').replace(/^@/, '') === uname) {
+        const avatar = document.getElementById('user-avatar');
+        const avatarImg = document.getElementById('user-avatar-img');
+        avatarImg.src = imageUrl;
+        avatar.classList.add('has-photo');
+      }
+      drawGraph();
+    })
+    .catch(err => console.error(err))
+    .finally(() => profileImageLoading.delete(uname));
+}
+
+async function fetchProfileImageForUsername(username) {
+  if (profileImageUrlCache.has(username)) return profileImageUrlCache.get(username);
+  const profileUrl = `https://proxy.corsfix.com/?https://t.me/${encodeURIComponent(username)}`;
+  const resp = await fetch(profileUrl, {
+    method: 'GET',
+    headers: {
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Origin': 'https://corsfix.com',
+      'Referer': 'https://corsfix.com/'
+    }
+  });
+  if (!resp.ok) return null;
+  const html = await resp.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const selectors = [
+    'meta[property="og:image"]',
+    'meta[name="twitter:image"]',
+    '.tgme_page_photo_image',
+    '.tgme_page_photo img'
+  ];
+  for (const sel of selectors) {
+    const el = doc.querySelector(sel);
+    if (!el) continue;
+    const url = el.getAttribute('content') || el.getAttribute('src');
+    if (url) return url;
+  }
+  return null;
+}
+
+function loadProfileImage(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
 }
 
 function runSimulation() {
@@ -1383,14 +1512,26 @@ function drawGraph() {
     ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
     ctx.fillStyle = col + (n.active === false ? '77' : 'bb');
     ctx.fill();
+
+    if (n.profileImg) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r - 1, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(n.profileImg, n.x - r, n.y - r, r * 2, r * 2);
+      ctx.restore();
+    }
+
     ctx.strokeStyle = hovered ? '#fff' : col;
     ctx.lineWidth = hovered ? 2.5 : 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${Math.max(9, r*0.62)}px Syne, sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText((n.label||'?')[0].toUpperCase(), n.x, n.y);
+    if (!n.profileImg) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.max(9, r*0.62)}px Syne, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText((n.label||'?')[0].toUpperCase(), n.x, n.y);
+    }
 
     const ls = Math.min(1, 1.15/transform.scale);
     ctx.save();
@@ -1521,6 +1662,7 @@ function onMouseMove(e) {
 
   const n = hitNode(w.x, w.y);
   hoveredNode = n;
+  if (n) ensureNodeProfileImage(n);
   canvas.style.cursor = n ? 'pointer' : 'default';
   if (n) showTooltip(n, e.clientX, e.clientY); else hideTooltip();
   drawGraph();
