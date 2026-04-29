@@ -369,6 +369,35 @@
     flex-shrink: 0;
   }
   .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .profile-extra {
+    margin-top: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    line-height: 1.6;
+    word-break: break-word;
+  }
+  .history-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .history-list {
+    margin-top: 8px;
+    max-height: 140px;
+    overflow-y: auto;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.67rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .history-row { margin-bottom: 4px; }
+  .history-row:last-child { margin-bottom: 0; }
 
   .status-msg {
     font-family: 'Space Mono', monospace; font-size: 0.69rem;
@@ -523,6 +552,10 @@
           <input type="radio" name="export-format" value="css">
           CSS (custom properties snapshot)
         </label>
+        <label class="export-opt">
+          <input type="radio" name="export-format" value="png">
+          PNG (graph image)
+        </label>
       </div>
 
       <div class="modal-actions">
@@ -551,7 +584,7 @@
 
       <div>
         <span class="section-label">User ID</span>
-        <input type="number" id="user-id" placeholder="123456789" min="1">
+        <input type="text" id="user-id" placeholder="123456789 or @username" inputmode="text" autocomplete="off">
       </div>
 
       <div>
@@ -583,6 +616,11 @@
         </div>
         <div class="stats-grid" id="stats-grid"></div>
         <div class="profile-fields" id="profile-fields"></div>
+        <div class="profile-extra" id="profile-reputation">Reputation: —</div>
+        <div class="history-actions">
+          <button class="copy-btn" type="button" onclick="loadSelectedHistory()">Load name history</button>
+        </div>
+        <div class="history-list" id="profile-history">Name and username history will appear here.</div>
       </div>
 
       <div class="divider"></div>
@@ -741,6 +779,9 @@ let downPos = null;
 let dragMoved = false;
 let currentCenterStats = null;
 let lastLoaded = null;
+let selectedProfileId = null;
+const reputationCache = new Map();
+const profileHistoryCache = new Map();
 
 window.addEventListener('load', () => {
   if (!getApiKey()) openModal(); else closeModal();
@@ -776,9 +817,49 @@ function setLoading(on) {
 }
 
 function loadData() {
-  const uid = document.getElementById('user-id').value.trim();
-  if (!uid) { setStatus('Enter a User ID first.', 'error'); return; }
-  loadDataForId(parseInt(uid));
+  resolveUserInputAndLoad();
+}
+
+async function resolveUserInputAndLoad() {
+  const raw = document.getElementById('user-id').value.trim();
+  if (!raw) { setStatus('Enter a User ID or @username first.', 'error'); return; }
+  if (/^\d+$/.test(raw)) {
+    loadDataForId(parseInt(raw, 10));
+    return;
+  }
+  if (!raw.startsWith('@') || raw.length < 2) {
+    setStatus('Use numeric ID or @username.', 'error');
+    return;
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey) { openModal(); return; }
+  setLoading(true);
+  clearStatus();
+  try {
+    const headers = { 'Authorization': `Bearer ${apiKey}`, 'accept': 'application/json' };
+    const username = raw.slice(1);
+    const res = await fetch(`https://telelog.org/api/v1/users/resolve_username?name=${encodeURIComponent(username)}`, { headers });
+    if (res.status === 401) {
+      setStatus('Invalid API key — click "🔑 API Key" to update.', 'error');
+      return;
+    }
+    if (!res.ok) throw new Error(`Resolve ${res.status}: ${res.statusText}`);
+    const payload = await res.json();
+    if (!payload.success) throw new Error('resolve_username returned success:false');
+    const user = payload.data?.[0];
+    if (!user?.id) {
+      setStatus(`No user found for ${raw}.`, 'error');
+      return;
+    }
+    document.getElementById('user-id').value = String(user.id);
+    await loadDataForId(user.id);
+  } catch (err) {
+    setStatus(err.message, 'error');
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
 }
 
 async function loadDataForId(userId) {
@@ -892,8 +973,117 @@ function renderUserCard(node, centerStats = null) {
   `).join('');
 
   window.__profileCopyValues = fieldRows.map(f => f.raw);
+  selectedProfileId = typeof rawId === 'number' ? rawId : parseInt(rawId, 10);
+  renderReputation('—');
+  renderHistoryPlaceholder();
+  if (selectedProfileId) loadReputation(selectedProfileId);
 
   document.getElementById('user-card').classList.add('visible');
+}
+
+function renderReputation(text) {
+  document.getElementById('profile-reputation').textContent = `Reputation: ${text}`;
+}
+
+function formatReputationData(data) {
+  if (data === null || data === undefined) return 'unknown';
+  if (typeof data === 'number' || typeof data === 'string') return String(data);
+  if (typeof data !== 'object') return 'unknown';
+
+  const name = data.reputation_name || data.reputation_code || 'unknown';
+  const bayes = typeof data.bayesian_average === 'number' ? data.bayesian_average.toFixed(2) : null;
+  const votes = typeof data.num_votes === 'number' ? data.num_votes : null;
+  const pos = typeof data.positive_count === 'number' ? data.positive_count : 0;
+  const neg = typeof data.negative_count === 'number' ? data.negative_count : 0;
+
+  const parts = [name];
+  if (bayes !== null) parts.push(`score ${bayes}`);
+  if (votes !== null) parts.push(`votes ${votes}`);
+  parts.push(`+${pos}/-${neg}`);
+  return parts.join(' · ');
+}
+
+function renderHistoryPlaceholder() {
+  const el = document.getElementById('profile-history');
+  el.textContent = 'Name and username history will appear here.';
+}
+
+async function loadReputation(userId) {
+  if (!userId) return;
+  if (reputationCache.has(userId)) {
+    renderReputation(reputationCache.get(userId));
+    return;
+  }
+  const apiKey = getApiKey();
+  if (!apiKey) return;
+  try {
+    const headers = { 'Authorization': `Bearer ${apiKey}`, 'accept': 'application/json' };
+    const res = await fetch(`https://telelog.org/api/v1/users/reputation?id=${encodeURIComponent(userId)}`, { headers });
+    if (!res.ok) return;
+    const payload = await res.json();
+    const data = payload?.data ?? payload;
+    const text = formatReputationData(data);
+    reputationCache.set(userId, text);
+    if (selectedProfileId === userId) renderReputation(text);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadSelectedHistory() {
+  if (!selectedProfileId) {
+    setStatus('Select a profile first.', 'error');
+    return;
+  }
+  if (profileHistoryCache.has(selectedProfileId)) {
+    renderHistory(profileHistoryCache.get(selectedProfileId));
+    return;
+  }
+  const apiKey = getApiKey();
+  if (!apiKey) { openModal(); return; }
+  const headers = { 'Authorization': `Bearer ${apiKey}`, 'accept': 'application/json' };
+  const userId = selectedProfileId;
+  const el = document.getElementById('profile-history');
+  el.textContent = 'Loading history...';
+  try {
+    const [namesRes, usernamesRes] = await Promise.all([
+      fetch(`https://telelog.org/api/v1/users/${userId}/names`, { headers }),
+      fetch(`https://telelog.org/api/v1/users/${userId}/usernames`, { headers })
+    ]);
+    if (!namesRes.ok || !usernamesRes.ok) {
+      throw new Error('Failed to load history');
+    }
+    const namesPayload = await namesRes.json();
+    const usernamesPayload = await usernamesRes.json();
+    const history = {
+      names: (namesPayload?.data || []).slice().sort((a, b) => new Date(b.date_time) - new Date(a.date_time)),
+      usernames: (usernamesPayload?.data || []).slice().sort((a, b) => new Date(b.date_time) - new Date(a.date_time))
+    };
+    profileHistoryCache.set(userId, history);
+    if (selectedProfileId === userId) renderHistory(history);
+    setStatus('History loaded.', 'success');
+  } catch (err) {
+    el.textContent = 'Could not load history for this profile.';
+    setStatus(err.message || 'History request failed.', 'error');
+    console.error(err);
+  }
+}
+
+function renderHistory(history) {
+  const names = history.names.length
+    ? history.names.slice(0, 10).map(item => `<div class="history-row">name: ${item.name || '—'} · ${fmtDate(item.date_time)}</div>`).join('')
+    : '<div class="history-row">No name history.</div>';
+  const usernames = history.usernames.length
+    ? history.usernames.slice(0, 10).map(item => `<div class="history-row">username: ${item.name || '—'} · ${fmtDate(item.date_time)}</div>`).join('')
+    : '<div class="history-row">No username history.</div>';
+  document.getElementById('profile-history').innerHTML = `${names}<div class="history-row">---</div>${usernames}`;
+}
+
+function fmtDate(v) {
+  if (!v) return 'unknown date';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return 'unknown date';
+  return d.toLocaleDateString();
 }
 
 async function copyProfileField(idx) {
@@ -965,7 +1155,7 @@ function exportData() {
     ];
     content = lines.join('\n');
     ext = 'txt';
-  } else {
+  } else if (format === 'css') {
     const cssVars = [
       ':root {',
       `  --telegift-center-id: "${lastLoaded.userId}";`,
@@ -981,6 +1171,35 @@ function exportData() {
     content = cssVars.join('\n');
     mime = 'text/css;charset=utf-8';
     ext = 'css';
+  } else if (format === 'png') {
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const exportCtx = exportCanvas.getContext('2d');
+    exportCtx.fillStyle = '#0a0a0f';
+    exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    exportCtx.drawImage(canvas, 0, 0);
+
+    exportCanvas.toBlob(blob => {
+      if (!blob) {
+        setStatus('Could not export PNG.', 'error');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `telegift-export-${stamp}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      closeExportModal();
+      setStatus('Exported as PNG.', 'success');
+    }, 'image/png');
+    return;
+  } else {
+    setStatus('Unsupported export format.', 'error');
+    return;
   }
 
   const blob = new Blob([content], { type: mime });
