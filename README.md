@@ -2,6 +2,11 @@
 
 Simple single-page app to visualize Telegram gift relationships using the telelog.org API.
 
+## Preview
+
+<p align="center"><img src="assets/preview.png"></p>
+
+
 ## Features
 
 - Load a graph by Telegram user ID
